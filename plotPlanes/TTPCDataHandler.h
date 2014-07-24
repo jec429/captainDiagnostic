@@ -25,8 +25,7 @@
 #include <cmath>
 
 
-/// class to assemble TPC run data, map it onto the wire planes,
-/// and save this representation as histogras in a ROOT file.
+/// class to assemble TPC run data, calculate noise RMS, and map onto the wire planes
 class TTPCDataHandler : MDatRunReader {
 
    /// the first and last run numbers from the log to be included in the mapping
@@ -42,7 +41,7 @@ class TTPCDataHandler : MDatRunReader {
    };
    typedef std::map<unsigned, std::array<PlaneWires, kgNPortsPerRun>> RunsWiresMap;
 
-   /// PlanesData: [plane][collection][wire][sample]
+   /// PlanesData: (*[plane][collection])[wire][sample]
    /// for now, PlaneData groups channels by collection number,
    /// an arbitrary association when planes are split across multiple runs.
    typedef std::array<std::array<int, kgNSamplesPerChannel>, kgNWiresPerPlane> PlaneCollection;
@@ -52,12 +51,13 @@ class TTPCDataHandler : MDatRunReader {
    /// WiresRMS: [plane][wire]
    typedef std::array<std::array<float, kgNWiresPerPlane>, kgNPlanes> WiresRMS;
 
-   /// ASICsRMS: [plane][motherboard][ASIC](fRMS, fWires)
+   /// ASICsMeanRMS: [plane][motherboard][ASIC](fRMS, fWires)
    struct RMSWires {
       float fRMS;
       std::array<unsigned short, kgNChannelsPerASIC> fWires;
    };
-   typedef std::array<std::array<std::array<RMSWires, kgNChannelsPerASIC>, kgNASICsPerMotherboard>, kgNPlanes> ASICsRMS;
+   typedef std::array<std::array<std::array<RMSWires, kgNASICsPerMotherboard>,
+                                 kgNMotherboardsPerPlane>, kgNPlanes> ASICsMeanRMS;
 
    // data members
    PlanesData fPlanesData;
@@ -79,7 +79,9 @@ class TTPCDataHandler : MDatRunReader {
    /// given a RunsData mapping and RunsWiresMap mapping, assemble data into a
    /// PlanesData vector indexed by plane, collection, wire, and sample.
    PlanesData AssemblePlanesData(const RunsData& kRunsData, const RunsWiresMap& kRunsWiresMap) const;
-   
+
+   /// compute the mean RMS for each wire
+   WiresRMS ComputeWiresRMS() const;
 
 public:
    /// given the path to a log file kLogPath and the run numbers of the first and last run
@@ -100,15 +102,24 @@ public:
    float ComputePlaneCollectionMeanVoltage(const unsigned short kiPlane,
                                            const unsigned short kiCollection) const;
 
-   /// compute the mean RMS for each wire
-   WiresRMS ComputeWiresRMS() const;
+   /// Calculate the voltage noise RMS for all wires.
+   /// This makes two passes: one pass calculates an initial voltage pedestal (mean0)
+   /// and noise RMS (RMS0).
+   /// The second pass recalculates a new pedestal (mean1) and RMS (RMS1) excluding
+   /// bins deviating by more than 3*RMS0 from mean0.
+   /// RMS1 is the final result.
+   WiresRMS GetWiresRMS() const;
 
-   // compute the mean RMS for ech ASIC
-   // ASICsRMS ComputeASICsRMS(const WiresRMS kWiresRMS) const;
+   /// Get the mean RMS for each ASIC
+   ASICsMeanRMS GetASICsMeanRMS() const;
+
+   /// get all wire plane voltage data
+   PlanesData GetPlanesData() const;
 
    /// write out all data for all wire planes to a ROOT file, grouped by collection number,
    /// an arbitrary association when planes are split across multiple runs.
    std::string WritePlanesData(const std::string& kROOTFilename) const;
+
 };
 
 #endif /* defined(__makeROOTfile__TTPCDataHandler__) */

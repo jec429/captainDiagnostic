@@ -31,7 +31,6 @@ protected:
    typedef std::vector<RunCollection> RunData;
 
    /// expands a POSIX expression, i.e., a path containing environmental variables
-   /// CURRENTLY NOT IN USE, CAUSES ROOT TO CRASH WHEN COMPILED WITH GCC. WORKS FINE WITH CLANG.
    std::string POSIXExpand(const std::string& kWord) const;
 
 public:

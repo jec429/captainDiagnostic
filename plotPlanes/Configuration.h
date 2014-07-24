@@ -14,17 +14,19 @@
 
 /// numerical constants describing relevent hardware configuration parameters during data taking
 const static float    kgChannelTimeWindow = 4.8; // ms
-const static unsigned kgNSamplesPerChannel = 9595, kgNChannelsPerPort = 32,
-                      kgNChannelsPerASIC = 16, kgNPortsPerRun = 2,
-                      kgNPortsPerPlane = 12, kgNPlanes = 3,
-                      kgMaxAllowedSample = 20000, // ADC units
-                      kgNMotherboardsPerPlane = 2,
+const static unsigned kgMaxAllowedSample = 20000; // ADC units
+const static unsigned short kgNSamplesPerChannel = 9595, kgNChannelsPerPort = 32,
+                            kgNChannelsPerASIC = 16, kgNPortsPerRun = 2,
+                            kgNPortsPerPlane = 12, kgNPlanes = 3,
+                            kgNMotherboardsPerPlane = 2,
 
 
-                      kgNChannelsPerRun = kgNChannelsPerPort * kgNPortsPerRun,
-                      kgNWiresPerPlane = kgNChannelsPerPort * kgNPortsPerPlane,
-                      kgNPorts = kgNPortsPerPlane * kgNPlanes,
-                      kgNASICsPerMotherboard = kgNWiresPerPlane / kgNMotherboardsPerPlane
-                                               / kgNChannelsPerASIC;
+                            kgNChannelsPerRun = kgNChannelsPerPort * kgNPortsPerRun,
+                            kgNWiresPerPlane = kgNChannelsPerPort * kgNPortsPerPlane,
+                            kgNPorts = kgNPortsPerPlane * kgNPlanes,
+                            kgNASICsPerMotherboard = kgNWiresPerPlane / kgNMotherboardsPerPlane
+                                                     / kgNChannelsPerASIC,
+                            kgNChannelsPerMotherboard = kgNWiresPerPlane / kgNMotherboardsPerPlane,
+                            kgNASICSPerPlane = kgNASICsPerMotherboard * kgNMotherboardsPerPlane;
 
 #endif

@@ -12,11 +12,6 @@ CAPTAIN
 Synopsis:
 plotPlanes [dat_directory] [first_run last_run log_file]
 
-plotPlanes will not expand any environmental variables, not even '~'.
-Attempting to expand these variables in a POSIX-compliant way crashes ROOT when
-GCC is used to compile (Clang works). See comments for MDatRunReader::POSIXExpand().
-I'm working on a fix.
-
 
 
 Description:

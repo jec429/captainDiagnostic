@@ -35,7 +35,7 @@ MDatRunReader::RunData MDatRunReader::ReadRunData(const std::string& kDatPath) c
             if (iChannel == 0 || (iChannel == 1 && pause)) {
 
                // start new collection
-               data.push_back(RunCollection{0});
+               data.push_back(RunCollection{{0}});
 
                pause = false;
             } else if (iChannel > 1) {

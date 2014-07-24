@@ -217,7 +217,10 @@ float TTPCDataHandler::ComputeWireMeanVoltage(const unsigned short kiPlane,
       }
    }
 
-   return mean / nSamples;
+   if (nSamples > 0) {
+      mean /= nSamples;
+   }
+   return mean;
 }
 
 
@@ -240,7 +243,10 @@ float TTPCDataHandler::ComputePlaneCollectionMeanVoltage(const unsigned short ki
       }
    }
 
-   return mean / nSamples;
+   if (nSamples > 0) {
+      mean /= nSamples;
+   }
+   return mean;
 }
 
 
@@ -251,28 +257,120 @@ TTPCDataHandler::WiresRMS TTPCDataHandler::ComputeWiresRMS() const
 
    for (unsigned short iPlane = 0; iPlane < fPlanesData.size(); ++iPlane) {
       for (unsigned short wire = 0; wire < kgNWiresPerPlane; ++wire) {
+         float mean0 = 0;
          unsigned nSamples = 0;
-
-         const float kWireMean = ComputeWireMeanVoltage(iPlane, wire);
-
-         for (unsigned short collection = 0; collection < fPlanesData[iPlane].size(); ++collection) {
-            for (unsigned short iSample = 0; iSample < (*fPlanesData[iPlane][collection])[wire].size(); ++iSample) {
-
+         for (auto& collection : fPlanesData[iPlane]) {
+            for (int sample : (*collection)[wire]) {
                // ignoring zero-valued samples
-               if ((*fPlanesData[iPlane][collection])[wire][iSample] != 0) {
-                  RMS[iPlane][wire] += std::pow((*fPlanesData[iPlane][collection])[wire][iSample] - kWireMean, 2);
+               if (sample != 0) {
+                  mean0 += sample;
                   ++nSamples;
                }
+            }
+         }
+         if (nSamples != 0) {
+            mean0 /= nSamples;
+         }
 
+         float RMS0 = 0.;
+         for (auto& collection : fPlanesData[iPlane]) {
+            for (int sample : (*collection)[wire]) {
+               // ignoring zero-valued samples
+               if (sample != 0) {
+                  RMS0 += std::pow(sample, 2);
+               }
+            }
+         }
+         if (nSamples != 0) {
+            RMS0 =  std::sqrt(RMS0 / nSamples);
+         }
+
+         float mean1 = 0;
+         nSamples = 0;
+         for (auto& collection : fPlanesData[iPlane]) {
+            for (int sample : (*collection)[wire]) {
+               // ignoring zero-valued samples
+               if (std::abs(sample - mean0) < 3 * RMS0 && sample != 0) {
+                  mean1 += sample;
+                  ++nSamples;
+               }
+            }
+         }
+         if (nSamples != 0) {
+            mean1 /= nSamples;
+         }
+
+         float RMS1 = 0;
+         nSamples = 0;
+         for (auto& collection : fPlanesData[iPlane]) {
+            for (int sample : (*collection)[wire]) {
+               // ignoring zero-valued samples
+               if (std::abs(sample - mean1) < 3 * RMS0 && sample != 0) {
+                  RMS1 += std::pow(sample - mean1, 2.);
+                  ++nSamples;
+               }
             }
          }
 
-        RMS[iPlane][wire] /= nSamples;
-        RMS[iPlane][wire] = std::sqrt(RMS[iPlane][wire]);
+         if (nSamples != 0) {
+            RMS[iPlane][wire] = std::sqrt(RMS1 / nSamples);
+         }
+      }
+   }
+   
+   return RMS;
+}
+
+
+
+TTPCDataHandler::WiresRMS TTPCDataHandler::GetWiresRMS() const
+{
+   return fRMS;
+}
+
+
+
+TTPCDataHandler::ASICsMeanRMS TTPCDataHandler::GetASICsMeanRMS() const
+{
+   ASICsMeanRMS allRMS;
+
+   for (unsigned short iPlane = 0; iPlane < fRMS.size(); ++iPlane) {
+      float ASICMeanRMS = 0;
+
+      for (unsigned short wire = 0, ASICChannel = 0, moboASIC = 0, motherboard = 0, nRMS = 0;
+           wire < fRMS[iPlane].size(); ++wire, ++ASICChannel) {
+
+
+
+         if (ASICChannel < kgNChannelsPerASIC) {
+
+            ASICMeanRMS += fRMS[iPlane][wire];
+            ++nRMS;
+
+         } else {
+
+            allRMS[iPlane][motherboard][moboASIC].fRMS = ASICMeanRMS / nRMS;
+
+            if (wire - motherboard * kgNChannelsPerMotherboard == kgNChannelsPerMotherboard) {
+               ++motherboard;
+               moboASIC = 0;
+            } else {
+               ++moboASIC;
+            }
+
+            ASICChannel = 0;
+            ASICMeanRMS = 0;
+
+            nRMS = 0;
+
+         }
+         allRMS[iPlane][motherboard][moboASIC].fWires[ASICChannel] = wire;
+
+
       }
    }
 
-   return RMS;
+   return allRMS;
 }
 
 
@@ -337,7 +435,7 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
 
 
-      { // construct RMS histogram
+      { // construct wire RMS histogram
 
          TH1F RMSHistogram(std::string("RMS_mb" + std::to_string(iPlane * 2 + 1)
                                        + "and" + std::to_string(iPlane * 2 + 2)).c_str(),
@@ -350,8 +448,30 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
          }
 
          RMSHistogram.SetXTitle("wire");
-         RMSHistogram.SetYTitle("voltage RMS (ADC units)");
+         RMSHistogram.SetYTitle("noise RMS voltage (ADC units)");
          RMSHistogram.Write();
+      }
+
+
+      { // contruct ASIC RMS histogram
+         TH1F ASICMeanRMSHistogram(std::string("ASICMeanRMS_mb" + std::to_string(iPlane * 2 + 1)
+                                               + "and" + std::to_string(iPlane * 2 + 2)).c_str(),
+                                   std::string("motherboards " + std::to_string(iPlane * 2 + 1)
+                                               + " and " + std::to_string(iPlane * 2 + 2)).c_str(),
+                                   kgNASICSPerPlane, 0, kgNASICSPerPlane);
+
+         ASICsMeanRMS RMS = GetASICsMeanRMS();
+
+         unsigned short bin = 1;
+         for (unsigned short motherboard = 0; motherboard < RMS[iPlane].size(); ++motherboard) {
+            for (unsigned short ASIC = 0; ASIC < RMS[iPlane][motherboard].size(); ++ASIC, ++bin) {
+               ASICMeanRMSHistogram.SetBinContent(bin, RMS[iPlane][motherboard][ASIC].fRMS);
+            }
+         }
+
+         ASICMeanRMSHistogram.SetXTitle("ASIC");
+         ASICMeanRMSHistogram.SetYTitle("mean noise RMS voltage (ADC units)");
+         ASICMeanRMSHistogram.Write();
       }
 
 
