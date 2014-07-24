@@ -12,7 +12,7 @@ OBJS = main.o MDatRunReader.o TTPCDataHandler.o
 
 #CC = /opt/local/bin/g++
 CC = g++
-CFLAGS = -fPIC -std=c++0x -std=c++11 -Wall -g
+CFLAGS = -fPIC -std=c++0x -std=c++11 -Wall #-g
 INCLUDES = -I/opt/local/include/root5
 LIBS = -L/opt/local/lib/root5 -lCore -lRIO -lHist -lGpad
 
