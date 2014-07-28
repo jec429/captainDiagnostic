@@ -11,6 +11,7 @@
 #include "MDatRunReader.h"
 
 
+
 MDatRunReader::RunData MDatRunReader::ReadRunData(const std::string& kDatPath) const
 {
    std::ifstream datFile(POSIXExpand(kDatPath), std::ios_base::binary);
@@ -77,13 +78,4 @@ MDatRunReader::RunData MDatRunReader::ReadRunData(const std::string& kDatPath) c
                 << kDatPath << std::endl;
       exit(EXIT_FAILURE);
    }
-}
-
-
-
-std::string MDatRunReader::POSIXExpand(const std::string &kWord) const
-{
-   wordexp_t expandedWord;
-   wordexp(kWord.c_str(), &expandedWord, 0);
-   return std::string(*expandedWord.we_wordv);
 }

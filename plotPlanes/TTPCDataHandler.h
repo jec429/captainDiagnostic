@@ -9,10 +9,11 @@
 //
 
 
-#ifndef __makeROOTfile__TTPCDataHandler__
-#define __makeROOTfile__TTPCDataHandler__
+#ifndef __plotPlanes__TTPCDataHandler__
+#define __plotPlanes__TTPCDataHandler__
 
 #include "MDatRunReader.h"
+#include "MCRunReader.h"
 #include <TH1.h>
 #include <TH2.h>
 #include <TFile.h>
@@ -26,7 +27,7 @@
 
 
 /// class to assemble TPC run data, calculate noise RMS, and map onto the wire planes
-class TTPCDataHandler : MDatRunReader {
+class TTPCDataHandler : protected MCRunReader {
 
    /// the first and last run numbers from the log to be included in the mapping
    const unsigned fkFirstRun, fkLastRun;
@@ -69,11 +70,11 @@ class TTPCDataHandler : MDatRunReader {
    /// wire planes and sets of wires monitored during that run,
    RunsWiresMap MapRunsToPlanes(std::ifstream& logFile) const;
 
-   /// given the path of the directory containing Nevis dat files and
-   /// a RunsWiresMapping from run numbers onto the wire planes and wires,
-   /// assemble a RunsData mapping from run numbers onto the data, indexed by
-   /// collection, channel, and sample.
-   RunsData AssembleRunsData(const std::string& kDatDirectory,
+   /// given the path of the directory containing Nevis dat files and/or C macro
+   // /run directories and a RunsWiresMap from run numbers onto the wire planes
+   /// and wires, assemble a RunsData mapping from run numbers onto the data,
+   /// indexed by collection, channel, and sample.
+   RunsData AssembleRunsData(const std::string& kRunPath,
                              const RunsWiresMap& kRunsToPlanes) const;
 
    /// given a RunsData mapping and RunsWiresMap mapping, assemble data into a
@@ -92,7 +93,7 @@ public:
    /// runNumber; lineDriverPortNumber1, lineDriverPortNumber2, ... # comment
    /// # comment
    ///
-   TTPCDataHandler(const std::string& kLogPath, const std::string& kDatDirectory,
+   TTPCDataHandler(const std::string& kLogPath, const std::string& kRunsDirectory,
                    const unsigned kFirstRun, const unsigned kLastRun);
 
    /// compute the mean sample value on the wire iWire
@@ -120,6 +121,14 @@ public:
    /// an arbitrary association when planes are split across multiple runs.
    std::string WritePlanesData(const std::string& kROOTFilename) const;
 
+   /// constructs a voltage map for each wire plane
+   TCanvas GetVoltageHistogram() const;
+
+   /// constructs a histogram plotting noise RMS voltage by wire
+   TH1D GetWiresRMSHistogram() const;
+
+   /// constructs a histogram plotting mean noise RMS voltage by ASIC
+   TH1D GetASICsMeanRMSHistogram() const;
 };
 
-#endif /* defined(__makeROOTfile__TTPCDataHandler__) */
+#endif /* defined(__plotPlanes__TTPCDataHandler__) */

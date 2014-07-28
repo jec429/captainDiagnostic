@@ -8,7 +8,7 @@
 #  07/02/2014
 #
 
-OBJS = main.o MDatRunReader.o TTPCDataHandler.o
+OBJS = main.o TTPCDataHandler.o MDatRunReader.o MCRunReader.o VMRunReader.o
 
 #CC = /opt/local/bin/g++
 CC = g++
@@ -27,8 +27,14 @@ main.o : main.cpp TTPCDataHandler.h
 TTPCDataHandler.o : TTPCDataHandler.cpp TTPCDataHandler.h MDatRunReader.h Configuration.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c TTPCDataHandler.cpp
 
-MDatRunReader.o : MDatRunReader.cpp MDatRunReader.h Configuration.h
+VMRunReader.o : VMRunReader.cpp VMRunReader.h Configuration.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c VMRunReader.cpp
+
+MDatRunReader.o : MDatRunReader.cpp MDatRunReader.h VMRunReader.h Configuration.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c MDatRunReader.cpp
+
+MCRunReader.o : MCRunReader.cpp MCRunReader.h VMRunReader.h Configuration.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c MCRunReader.cpp
 
 clean :
 	rm -f $(OBJS)

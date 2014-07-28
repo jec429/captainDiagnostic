@@ -14,7 +14,7 @@
 
 
 TTPCDataHandler::TTPCDataHandler(const std::string& kLogPath,
-                                 const std::string& kDatDirectory,
+                                 const std::string& kRunsDirectory,
                                  const unsigned kFirstRun,
                                  const unsigned kLastRun)
 : fkFirstRun(kFirstRun), fkLastRun(kLastRun)
@@ -23,7 +23,7 @@ TTPCDataHandler::TTPCDataHandler(const std::string& kLogPath,
    if (logFile.good()) {
 
       const RunsWiresMap kRunsWiresMap = MapRunsToPlanes(logFile);
-      const RunsData kRunsData = AssembleRunsData(kDatDirectory, kRunsWiresMap);
+      const RunsData kRunsData = AssembleRunsData(kRunsDirectory, kRunsWiresMap);
 
       fPlanesData = AssemblePlanesData(kRunsData, kRunsWiresMap);
       fRMS = ComputeWiresRMS();
@@ -137,18 +137,22 @@ TTPCDataHandler::RunsWiresMap TTPCDataHandler::MapRunsToPlanes(std::ifstream& lo
 
 
 
-TTPCDataHandler::RunsData TTPCDataHandler::AssembleRunsData(const std::string& kDatDirectory,
+TTPCDataHandler::RunsData TTPCDataHandler::AssembleRunsData(const std::string& kRunsDirectory,
                                                             const RunsWiresMap& kRunsToPlanes) const
 {
    RunsData runsData;
-   for (auto& run : kRunsToPlanes) {
-      runsData.emplace(run.first, ReadRunData(POSIXExpand(kDatDirectory) + "/xmit_exttrig_bin_"
-                                              + std::to_string(run.first) + ".dat"));
-   }
 
+   for (auto& run : kRunsToPlanes) {
+      if (!kgCMacroMode) {
+         runsData.emplace(run.first, ReadRunData(POSIXExpand(kRunsDirectory) + "/xmit_exttrig_bin_"
+                                                 + std::to_string(run.first) + ".dat"));
+      } else {
+         runsData.emplace(run.first, ReadRunData(POSIXExpand(kRunsDirectory)
+                                                 + "/outputdir_run_" + std::to_string(run.first)));
+      }
+   }
    return runsData;
 }
-
 
 
 TTPCDataHandler::PlanesData TTPCDataHandler::AssemblePlanesData(const RunsData& kRunsData,
@@ -392,16 +396,15 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
       gStyle->SetOptStat(false);
 
+      
+
       { // construct voltage histograms
          for (unsigned short iCollection = 0; iCollection < fPlanesData[iPlane].size(); ++iCollection) {
 
             // histograms have voltage pedestal subtracted
             const int kVoltagePedestal = std::round(ComputePlaneCollectionMeanVoltage(iPlane, iCollection));
-            TH2S voltageHistogram(std::string("volts_mb" + std::to_string(iPlane * 2 + 1)
-                                              + "and" + std::to_string(iPlane * 2 + 2)
-                                              + "col" + std::to_string(iCollection)).c_str(),
-                                  std::string("motherboards " + std::to_string(iPlane * 2 + 1)
-                                              + " and " + std::to_string(iPlane * 2 + 2) + ", collection "
+            TH2S voltageHistogram(std::string("volts_" + kgPlaneNames[iPlane] + "PlaneCol" + std::to_string(iCollection)).c_str(),
+                                  std::string(kgPlaneNames[iPlane] + " plane, collection "
                                               + std::to_string(iCollection) + ", subtracted pedestal "
                                               + std::to_string(kVoltagePedestal) + " ADC units").c_str(),
                                   kgNSamplesPerChannel, 0, kgChannelTimeWindow,
@@ -437,10 +440,8 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
       { // construct wire RMS histogram
 
-         TH1F RMSHistogram(std::string("RMS_mb" + std::to_string(iPlane * 2 + 1)
-                                       + "and" + std::to_string(iPlane * 2 + 2)).c_str(),
-                           std::string("motherboards " + std::to_string(iPlane * 2 + 1)
-                                       + " and " + std::to_string(iPlane * 2 + 2)).c_str(),
+         TH1F RMSHistogram(std::string("RMS_" + kgPlaneNames[iPlane] + "Plane").c_str(),
+                           std::string(kgPlaneNames[iPlane] + " plane").c_str(),
                            kgNWiresPerPlane, 0, kgNWiresPerPlane);
 
          for (unsigned short wire = 0; wire < fRMS[iPlane].size(); ++wire) {
@@ -450,14 +451,16 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
          RMSHistogram.SetXTitle("wire");
          RMSHistogram.SetYTitle("noise RMS voltage (ADC units)");
          RMSHistogram.Write();
+
+         TCanvas cRMS;
+         RMSHistogram.Draw();
+         cRMS.SaveAs((std::string(RMSHistogram.GetName()) + ".pdf").c_str());
       }
 
 
       { // contruct ASIC RMS histogram
-         TH1F ASICMeanRMSHistogram(std::string("ASICMeanRMS_mb" + std::to_string(iPlane * 2 + 1)
-                                               + "and" + std::to_string(iPlane * 2 + 2)).c_str(),
-                                   std::string("motherboards " + std::to_string(iPlane * 2 + 1)
-                                               + " and " + std::to_string(iPlane * 2 + 2)).c_str(),
+         TH1F ASICMeanRMSHistogram(std::string("ASICMeanRMS_" + kgPlaneNames[iPlane] + "Plane").c_str(),
+                                   std::string(kgPlaneNames[iPlane] + " plane").c_str(),
                                    kgNASICSPerPlane, 0, kgNASICSPerPlane);
 
          ASICsMeanRMS RMS = GetASICsMeanRMS();
@@ -472,6 +475,11 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
          ASICMeanRMSHistogram.SetXTitle("ASIC");
          ASICMeanRMSHistogram.SetYTitle("mean noise RMS voltage (ADC units)");
          ASICMeanRMSHistogram.Write();
+
+         TCanvas cASICMeanRMS;
+         ASICMeanRMSHistogram.Draw();
+         cASICMeanRMS.SaveAs((std::string(ASICMeanRMSHistogram.GetName()) + ".pdf").c_str());
+
       }
 
 
