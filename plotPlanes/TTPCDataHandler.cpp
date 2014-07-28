@@ -384,9 +384,11 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
    std::string runs("runs" + std::to_string(fkFirstRun) + "through" + std::to_string(fkLastRun)),
                allDataFilename(runs + ".root");
    // if the file already exists, try appending successive numbers __2, __3, ...
-   for (unsigned short i = 2; std::ifstream(allDataFilename).good(); ++i) {
-      allDataFilename = runs + "__" + std::to_string(i) + ".root";
+   unsigned short iDuplicate;
+   for (iDuplicate = 2; std::ifstream(allDataFilename).good(); ++iDuplicate) {
+      allDataFilename = runs + "__" + std::to_string(iDuplicate) + ".root";
    }
+   --iDuplicate; // because for loops overshoot before the break
 
    TFile ROOTFile(allDataFilename.c_str(), "RECREATE");
 
@@ -454,7 +456,8 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
          TCanvas cRMS;
          RMSHistogram.Draw();
-         cRMS.SaveAs((std::string(RMSHistogram.GetName()) + ".pdf").c_str());
+         cRMS.SaveAs((std::string(RMSHistogram.GetName())
+                      + "__" + std::to_string(iDuplicate) + ".pdf").c_str());
       }
 
 
@@ -478,7 +481,8 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
          TCanvas cASICMeanRMS;
          ASICMeanRMSHistogram.Draw();
-         cASICMeanRMS.SaveAs((std::string(ASICMeanRMSHistogram.GetName()) + ".pdf").c_str());
+         cASICMeanRMS.SaveAs((std::string(ASICMeanRMSHistogram.GetName())
+                              + "__" + std::to_string(iDuplicate) + ".pdf").c_str());
 
       }
 
