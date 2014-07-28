@@ -13,6 +13,7 @@
 #define __TTPCDataHandler__MCRunReader__
 
 #include "VMRunReader.h"
+#include <cstring>
 
 
 /// mixin class to read a single run from a ROOT single-histogram C macro
