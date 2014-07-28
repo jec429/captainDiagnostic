@@ -143,13 +143,13 @@ TTPCDataHandler::RunsData TTPCDataHandler::AssembleRunsData(const std::string& k
    RunsData runsData;
 
    for (auto& run : kRunsToPlanes) {
-      if (!kgCMacroMode) {
+#if C_MACRO_MODE != 1
          runsData.emplace(run.first, ReadRunData(POSIXExpand(kRunsDirectory) + "/xmit_exttrig_bin_"
                                                  + std::to_string(run.first) + ".dat"));
-      } else {
+#else
          runsData.emplace(run.first, ReadRunData(POSIXExpand(kRunsDirectory)
                                                  + "/outputdir_run_" + std::to_string(run.first)));
-      }
+#endif
    }
    return runsData;
 }
@@ -191,6 +191,7 @@ TTPCDataHandler::PlanesData TTPCDataHandler::AssemblePlanesData(const RunsData& 
 
                for (unsigned short iSample = 0; iSample < kRunsData.at(run.first)[iCollection][kRunChannel].size(); ++iSample) {
                   (*planesData[kiPlane][iCollection])[kWire][iSample] = kRunsData.at(run.first)[iCollection][kRunChannel][iSample];
+
                }
 
             }
@@ -384,12 +385,13 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
    std::string runs("runs" + std::to_string(fkFirstRun) + "through" + std::to_string(fkLastRun)),
                allDataFilename(runs + ".root");
    // if the file already exists, try appending successive numbers __2, __3, ...
-   unsigned short iDuplicate;
-   for (iDuplicate = 2; std::ifstream(allDataFilename).good(); ++iDuplicate) {
-      allDataFilename = runs + "__" + std::to_string(iDuplicate) + ".root";
+   unsigned short iDuplicate = 0;
+   if (std::ifstream(allDataFilename).good()) {
+      for (iDuplicate = 2; std::ifstream(allDataFilename).good(); ++iDuplicate) {
+         allDataFilename = runs + "__" + std::to_string(iDuplicate) + ".root";
+      }
+      --iDuplicate; // because for loops overshoot before the break
    }
-   --iDuplicate; // because for loops overshoot before the break
-
    TFile ROOTFile(allDataFilename.c_str(), "RECREATE");
 
 
@@ -425,8 +427,10 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
                      voltageHistogram.SetBinContent(iSample + 1, wire + 1,
                                                     (*fPlanesData[iPlane][iCollection])[wire][iSample]
                                                     - kVoltagePedestal);
+
+
                   }
-                  
+
                }
             }
             
@@ -456,8 +460,10 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
          TCanvas cRMS;
          RMSHistogram.Draw();
-         cRMS.SaveAs((std::string(RMSHistogram.GetName())
-                      + "__" + std::to_string(iDuplicate) + ".pdf").c_str());
+         cRMS.SaveAs(std::string(RMSHistogram.GetName()
+                                  + (iDuplicate == 0 ? ""
+                                    : "__" + std::to_string(iDuplicate))
+                                  + ".pdf").c_str());
       }
 
 
@@ -481,8 +487,10 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
          TCanvas cASICMeanRMS;
          ASICMeanRMSHistogram.Draw();
-         cASICMeanRMS.SaveAs((std::string(ASICMeanRMSHistogram.GetName())
-                              + "__" + std::to_string(iDuplicate) + ".pdf").c_str());
+         cASICMeanRMS.SaveAs(std::string(ASICMeanRMSHistogram.GetName()
+                                         + (iDuplicate == 0 ? ""
+                                            : "__" + std::to_string(iDuplicate))
+                                         + ".pdf").c_str());
 
       }
 

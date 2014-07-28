@@ -27,7 +27,14 @@
 
 
 /// class to assemble TPC run data, calculate noise RMS, and map onto the wire planes
-class TTPCDataHandler : protected MCRunReader {
+class TTPCDataHandler
+:
+#if C_MACRO_MODE != 1
+   protected MDatRunReader
+#else
+   protected MCRunReader
+#endif
+{
 
    /// the first and last run numbers from the log to be included in the mapping
    const unsigned fkFirstRun, fkLastRun;

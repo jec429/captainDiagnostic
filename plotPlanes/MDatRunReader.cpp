@@ -16,7 +16,6 @@ MDatRunReader::RunData MDatRunReader::ReadRunData(const std::string& kDatPath) c
 {
    std::ifstream datFile(POSIXExpand(kDatPath), std::ios_base::binary);
    if (datFile.good()) {
-
       RunData data;
       uint16_t word; // one 16-bit binary word
       bool pause = true;

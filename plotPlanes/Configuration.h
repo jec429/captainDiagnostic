@@ -35,9 +35,9 @@ const static std::array<std::string, kgNPlanes> kgPlaneNames{"u","v","anode"};
 
 
 
-/// set kCMacroMode to true if you want to read from ReadDataByChannel ROOT *.C
+/// set C_MACRO_MODE to 1 if you want to read from ReadDataByChannel ROOT *.C
 /// macro run directories instead of dat files.
-const static bool kgCMacroMode = false;
+#define C_MACRO_MODE 0
 const static unsigned short kgNCollectionsPerRun = 5; // only used in C Macro Mode
 
 
