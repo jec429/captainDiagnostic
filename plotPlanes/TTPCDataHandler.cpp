@@ -341,10 +341,8 @@ TTPCDataHandler::ASICsMeanRMS TTPCDataHandler::GetASICsMeanRMS() const
 
    for (unsigned short iPlane = 0; iPlane < fRMS.size(); ++iPlane) {
       float ASICMeanRMS = 0;
-
-      for (unsigned short wire = 0, ASICChannel = 0, moboASIC = 0, motherboard = 0, nRMS = 0;
-           wire < fRMS[iPlane].size(); ++wire, ++ASICChannel) {
-
+      unsigned short wire = 0, ASICChannel = 0, moboASIC = 0, motherboard = 0, nRMS = 0;
+      for (; wire < fRMS[iPlane].size(); ++wire, ++ASICChannel) {
 
 
          if (ASICChannel < kgNChannelsPerASIC) {
@@ -352,27 +350,27 @@ TTPCDataHandler::ASICsMeanRMS TTPCDataHandler::GetASICsMeanRMS() const
             ASICMeanRMS += fRMS[iPlane][wire];
             ++nRMS;
 
-         } else {
+         } else { // this ASIC is done
 
+            // store its RMS
             allRMS[iPlane][motherboard][moboASIC].fRMS = ASICMeanRMS / nRMS;
 
-            if (wire - motherboard * kgNChannelsPerMotherboard == kgNChannelsPerMotherboard) {
+            // begin the next ASIC
+            if (wire - motherboard * kgNChannelsPerMotherboard < kgNChannelsPerMotherboard) {
+               ++moboASIC;
+            } else {
                ++motherboard;
                moboASIC = 0;
-            } else {
-               ++moboASIC;
             }
-
             ASICChannel = 0;
             ASICMeanRMS = 0;
-
             nRMS = 0;
 
          }
          allRMS[iPlane][motherboard][moboASIC].fWires[ASICChannel] = wire;
-
-
       }
+      // catch the last ASIC in the plane
+      allRMS[iPlane][motherboard][moboASIC].fRMS = ASICMeanRMS / nRMS;
    }
 
    return allRMS;
