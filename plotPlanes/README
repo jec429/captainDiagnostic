@@ -40,4 +40,4 @@ These samples are currently set to zero.
 Zero-valued samples are ignored in mean and RMS calculations.
 
 The range of runs being processed must be contiguous, and there can be no runs before
-the first run to be processed in the log file. This will be fixed in the next few days.
+the first run to be processed in the log file.
