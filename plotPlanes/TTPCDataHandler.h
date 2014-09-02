@@ -16,6 +16,7 @@
 #include "MCRunReader.h"
 #include <TH1.h>
 #include <TH2.h>
+#include <TLine.h>
 #include <TFile.h>
 #include <TDirectory.h>
 #include <TStyle.h>
@@ -28,11 +29,10 @@
 
 /// class to assemble TPC run data, calculate noise RMS, and map onto the wire planes
 class TTPCDataHandler
-:
 #if C_MACRO_MODE != 1
-   protected MDatRunReader
+:  protected MDatRunReader
 #else
-   protected MCRunReader
+:  protected MCRunReader
 #endif
 {
 
@@ -67,8 +67,16 @@ class TTPCDataHandler
    typedef std::array<std::array<std::array<RMSWires, kgNASICsPerMotherboard>,
                                  kgNMotherboardsPerPlane>, kgNPlanes> ASICsMeanRMS;
 
+
+   /// CrossCorrelations: [plane][collection][wire][phase]
+   typedef std::array<std::array<std::array<std::array<std::array<float, kgNSamplesPerChannel>,
+                                             kgNWiresPerPlane>, kgNWiresPerPlane>, kgNCollectionsPerRun>, kgNPlanes>
+           CrossCorrelations;
+
+
    // data members
    PlanesData fPlanesData;
+   // CrossCorrelations fCorrelations;
    WiresRMS fRMS;
 
 
@@ -87,6 +95,9 @@ class TTPCDataHandler
    /// given a RunsData mapping and RunsWiresMap mapping, assemble data into a
    /// PlanesData vector indexed by plane, collection, wire, and sample.
    PlanesData AssemblePlanesData(const RunsData& kRunsData, const RunsWiresMap& kRunsWiresMap) const;
+
+   /// Compute cross-correlations between wires
+   CrossCorrelations ComputeCrossCorrelations() const;
 
    /// compute the mean RMS for each wire
    WiresRMS ComputeWiresRMS() const;
@@ -120,6 +131,13 @@ public:
 
    /// Get the mean RMS for each ASIC
    ASICsMeanRMS GetASICsMeanRMS() const;
+
+   /// Compute the percentge of channels with RMS > 3 sigmaRMS
+   float ComputeFractionNoisy(const WiresRMS kRMS, const unsigned short kiPlane) const;
+   float ComputeFractionNoisy(const ASICsMeanRMS kRMS, const unsigned short kiPlane) const;
+
+   /// Get cross-correlations between wires
+   CrossCorrelations GetCrossCorrelations() const;
 
    /// get all wire plane voltage data
    PlanesData GetPlanesData() const;

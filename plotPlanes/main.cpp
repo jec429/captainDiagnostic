@@ -19,7 +19,6 @@ int main(int argc, const char* argv[])
    unsigned short iArg = 0;
    if (argc == 5) {
 
-
       datDirectoryPath = argv[++iArg];
       firstRun = std::atoi(argv[++iArg]);
       lastRun = std::atoi(argv[++iArg]);

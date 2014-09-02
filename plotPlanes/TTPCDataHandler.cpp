@@ -30,7 +30,7 @@ TTPCDataHandler::TTPCDataHandler(const std::string& kLogPath,
 
    } else {
       std::cout << "plotPlanes TTPCDataHandler() error: could not open log \""
-                << kLogPath << "\"" << std::endl;
+      << kLogPath << "\"" << std::endl;
       exit(EXIT_FAILURE);
    }
    logFile.close();
@@ -55,12 +55,16 @@ TTPCDataHandler::RunsWiresMap TTPCDataHandler::MapRunsToPlanes(std::ifstream& lo
    while (logFile.good()) {
 
       // ignore groups of commented lines when they appear
-      while (logFile.peek() == '#') {
+      char temp;
+
+      while ((logFile.get(temp), temp) == '#') {
          logFile.ignore(256, '\n');
       }
+      logFile.unget();
 
       // run number
       unsigned run;
+
 
 
       // lambda function checking whether there are any ports listed for this run in the log
@@ -75,10 +79,10 @@ TTPCDataHandler::RunsWiresMap TTPCDataHandler::MapRunsToPlanes(std::ifstream& lo
       };
 
 
-
       // read in the run number and port numbers in this log entry
       logFile >> run;
-      if (run >= fkFirstRun && run <= fkLastRun) {
+
+      if (run >= fkFirstRun && run <= fkLastRun && logFile.good()) {
          // the line driver port numbers corresponding to this run
          std::array<unsigned short, kgNPortsPerRun> runPorts;
 
@@ -96,6 +100,8 @@ TTPCDataHandler::RunsWiresMap TTPCDataHandler::MapRunsToPlanes(std::ifstream& lo
 
          runsToPorts.emplace(run, runPorts);
       }
+
+      logFile.ignore(256, '\n');
    }
 
 
@@ -107,9 +113,17 @@ TTPCDataHandler::RunsWiresMap TTPCDataHandler::MapRunsToPlanes(std::ifstream& lo
 
       std::array<unsigned short, kgNChannelsPerPort> wires;
       for (unsigned short iWire = 0; iWire < kgNChannelsPerPort; ++iWire) {
-         const unsigned short kWire = port * kgNChannelsPerPort -
-                                      kPlane * kgNWiresPerPlane + iWire;
-         wires[iWire] = kWire;
+
+         unsigned wire;
+         if (port % 2 == 0) {
+            wire = port * kgNChannelsPerPort - kPlane * kgNWiresPerPlane
+            + 2 * iWire;
+         } else {
+            wire = (port - 1) * kgNChannelsPerPort - kPlane * kgNWiresPerPlane
+            + 2 * iWire + 1;
+         }
+
+         wires[iWire] = wire;
       }
 
       const PlaneWires kPortWires {kPlane, wires};
@@ -144,11 +158,11 @@ TTPCDataHandler::RunsData TTPCDataHandler::AssembleRunsData(const std::string& k
 
    for (auto& run : kRunsToPlanes) {
 #if C_MACRO_MODE != 1
-         runsData.emplace(run.first, ReadRunData(POSIXExpand(kRunsDirectory) + "/xmit_exttrig_bin_"
-                                                 + std::to_string(run.first) + ".dat"));
+      runsData.emplace(run.first, ReadRunData(POSIXExpand(kRunsDirectory) + "/xmit_exttrig_bin_"
+                                              + std::to_string(run.first) + ".dat"));
 #else
-         runsData.emplace(run.first, ReadRunData(POSIXExpand(kRunsDirectory)
-                                                 + "/outputdir_run_" + std::to_string(run.first)));
+      runsData.emplace(run.first, ReadRunData(POSIXExpand(kRunsDirectory)
+                                              + "/outputdir_run_" + std::to_string(run.first)));
 #endif
    }
    return runsData;
@@ -176,7 +190,7 @@ TTPCDataHandler::PlanesData TTPCDataHandler::AssemblePlanesData(const RunsData& 
 
             while (planesData.size() <= kiPlane) {
                planesData.push_back(PlaneData{});
-               
+
             }
             while (planesData[kiPlane].size() <= iCollection) {
                std::unique_ptr<PlaneCollection> collection(new PlaneCollection{});
@@ -187,7 +201,7 @@ TTPCDataHandler::PlanesData TTPCDataHandler::AssemblePlanesData(const RunsData& 
             for (unsigned short portChannel = 0; portChannel < kgNChannelsPerPort; ++portChannel) {
 
                const unsigned short kRunChannel = iRunPort * kgNChannelsPerPort + portChannel,
-                                    kWire = kRunsWiresMap.at(run.first)[iRunPort].fWires[portChannel];
+               kWire = kRunsWiresMap.at(run.first)[iRunPort].fWires[portChannel];
 
                for (unsigned short iSample = 0; iSample < kRunsData.at(run.first)[iCollection][kRunChannel].size(); ++iSample) {
                   (*planesData[kiPlane][iCollection])[kWire][iSample] = kRunsData.at(run.first)[iCollection][kRunChannel][iSample];
@@ -322,7 +336,7 @@ TTPCDataHandler::WiresRMS TTPCDataHandler::ComputeWiresRMS() const
          }
       }
    }
-   
+
    return RMS;
 }
 
@@ -378,10 +392,80 @@ TTPCDataHandler::ASICsMeanRMS TTPCDataHandler::GetASICsMeanRMS() const
 
 
 
+float TTPCDataHandler::ComputeFractionNoisy(const WiresRMS kRMS,
+                                            const unsigned short kiPlane) const {
+
+   // compute mean RMS
+   float meanRMS = 0;
+   for (float RMS : kRMS[kiPlane]) {
+      meanRMS += RMS;
+
+   }
+   meanRMS /= kgNWiresPerPlane;
+
+   // compute standard deviation of RMS
+   float sigmaRMS = 0;
+   for (float RMS : kRMS[kiPlane]) {
+      sigmaRMS += std::pow(RMS - meanRMS, 2);
+   }
+   sigmaRMS /= kgNWiresPerPlane;
+   sigmaRMS = std::sqrt(sigmaRMS);
+
+   // count noisy channels
+   unsigned short nNoisy = 0;
+   for (float RMS : kRMS[kiPlane]) {
+      if (RMS - meanRMS > kgNSigmaNoisyThreshold * sigmaRMS) {
+         ++nNoisy;
+      }
+   }
+
+
+   return static_cast<float>(nNoisy) / kgNWiresPerPlane;
+}
+
+
+
+float TTPCDataHandler::ComputeFractionNoisy(const ASICsMeanRMS kRMS,
+                                            const unsigned short kiPlane) const {
+
+   // compute mean RMS
+   float meanRMS = 0;
+   for (auto motherboard : kRMS[kiPlane]) {
+      for (auto ASIC : motherboard) {
+         meanRMS += ASIC.fRMS;
+      }
+   }
+   meanRMS /= kgNASICSPerPlane;
+
+   // compute standard deviation of RMS
+   float sigmaRMS = 0;
+   for (auto motherboard : kRMS[kiPlane]) {
+      for (auto ASIC : motherboard) {
+         sigmaRMS += std::pow(ASIC.fRMS - meanRMS, 2);
+      }
+   }
+   sigmaRMS /= kgNASICSPerPlane;
+   sigmaRMS = std::sqrt(sigmaRMS);
+
+   // count noisy channels
+   unsigned short nNoisy = 0;
+   for (auto motherboard : kRMS[kiPlane]) {
+      for (auto ASIC : motherboard) {
+         if (ASIC.fRMS - meanRMS > kgNSigmaNoisyThreshold * sigmaRMS) {
+            ++nNoisy;
+         }
+      }
+   }
+
+   return static_cast<float>(nNoisy) / kgNASICSPerPlane;
+}
+
+
+
 std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) const
 {
    std::string runs("runs" + std::to_string(fkFirstRun) + "through" + std::to_string(fkLastRun)),
-               allDataFilename(runs + ".root");
+   allDataFilename(runs + ".root");
    // if the file already exists, try appending successive numbers __2, __3, ...
    unsigned short iDuplicate = 0;
    if (std::ifstream(allDataFilename).good()) {
@@ -398,7 +482,7 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
       gStyle->SetOptStat(false);
 
-      
+
 
       { // construct voltage histograms
          for (unsigned short iCollection = 0; iCollection < fPlanesData[iPlane].size(); ++iCollection) {
@@ -431,9 +515,9 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
                }
             }
-            
 
-            
+
+
             TCanvas canvas(voltageHistogram.GetName(), voltageHistogram.GetTitle());
             voltageHistogram.Draw("COLZ");
             canvas.Write();
@@ -445,7 +529,9 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
       { // construct wire RMS histogram
 
          TH1F RMSHistogram(std::string("RMS_" + kgPlaneNames[iPlane] + "Plane").c_str(),
-                           std::string(kgPlaneNames[iPlane] + " plane").c_str(),
+                           std::string(kgPlaneNames[iPlane] + " plane,"
+                                       + std::to_string(ComputeFractionNoisy(fRMS, iPlane) * 100)
+                                       + "% are >1#sigma").c_str(),
                            kgNWiresPerPlane, 0, kgNWiresPerPlane);
 
          for (unsigned short wire = 0; wire < fRMS[iPlane].size(); ++wire) {
@@ -459,18 +545,20 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
          TCanvas cRMS;
          RMSHistogram.Draw();
          cRMS.SaveAs(std::string(RMSHistogram.GetName()
-                                  + (iDuplicate == 0 ? ""
+                                 + (iDuplicate == 0 ? ""
                                     : "__" + std::to_string(iDuplicate))
-                                  + ".pdf").c_str());
+                                 + ".pdf").c_str());
       }
 
 
       { // contruct ASIC RMS histogram
+         ASICsMeanRMS RMS = GetASICsMeanRMS();
          TH1F ASICMeanRMSHistogram(std::string("ASICMeanRMS_" + kgPlaneNames[iPlane] + "Plane").c_str(),
-                                   std::string(kgPlaneNames[iPlane] + " plane").c_str(),
+                                   std::string(kgPlaneNames[iPlane] + " plane,"
+                                               + std::to_string(ComputeFractionNoisy(RMS, iPlane) * 100)
+                                               + "% are >1#sigma").c_str(),
                                    kgNASICSPerPlane, 0, kgNASICSPerPlane);
 
-         ASICsMeanRMS RMS = GetASICsMeanRMS();
 
          unsigned short bin = 1;
          for (unsigned short motherboard = 0; motherboard < RMS[iPlane].size(); ++motherboard) {
@@ -478,22 +566,22 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
                ASICMeanRMSHistogram.SetBinContent(bin, RMS[iPlane][motherboard][ASIC].fRMS);
             }
          }
-
+         
          ASICMeanRMSHistogram.SetXTitle("ASIC");
          ASICMeanRMSHistogram.SetYTitle("mean noise RMS voltage (ADC units)");
          ASICMeanRMSHistogram.Write();
-
+         
          TCanvas cASICMeanRMS;
          ASICMeanRMSHistogram.Draw();
          cASICMeanRMS.SaveAs(std::string(ASICMeanRMSHistogram.GetName()
                                          + (iDuplicate == 0 ? ""
                                             : "__" + std::to_string(iDuplicate))
                                          + ".pdf").c_str());
-
+         
       }
-
-
-
+      
+      
+      
    }
    
    ROOTFile.Close();

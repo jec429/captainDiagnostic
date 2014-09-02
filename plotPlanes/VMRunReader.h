@@ -30,7 +30,7 @@ protected:
    typedef std::array<std::array<int, kgNSamplesPerChannel>, kgNChannelsPerRun> RunCollection;
    typedef std::vector<RunCollection> RunData;
 
-    /// expands a POSIX expression, i.e., a path containing environmental variables
+   /// expands a POSIX expression, i.e., a path containing environmental variables
    static std::string POSIXExpand(const std::string& kWord);
 
 public:
