@@ -14,7 +14,7 @@ OBJS = main.o TTPCDataHandler.o MDatRunReader.o MCRunReader.o VMRunReader.o
 CC = g++
 CFLAGS = -fPIC -std=c++0x -std=c++11 -Wall #-g
 INCLUDES = -I/usr/local/include/root
-LIBS = -L/usr/local/lib/root -lCore -lRIO -lHist -lGpad -lGraf
+LIBS = -L/usr/local/lib/root -lCore -lRIO -lHist -lGpad
 
 
 all : plotPlanes
