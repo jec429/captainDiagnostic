@@ -10,13 +10,13 @@ CAPTAIN
 
 
 Synopsis:
-plotPlanes [dat_directory] [first_run last_run log_file]
+plotPlanes [dat_directory log_file run_number]
 
 
 
 Description:
-plotPlanes takes in a plaintext run log and binry Nevis dat files and outputs a ROOT file
-plotting voltage as a function of time and wire index for each plane and collection index.
+plotPlanes takes in a plaintext run log and binary Nevis dat files and outputs a ROOT file
+plotting voltage as a function of time and wire index for each plane and event index.
 
 
 
@@ -28,7 +28,7 @@ runNumber; lineDriverPortNumber1, lineDriverPortNumber2, ... # comment
 
 
 Notes:
-Makefile assumes a root installation at "/usr/local/root". Modify as necessary.
+Makefile assumes a ROOT installation at "/usr/local/root". Modify as necessary.
 
 
 
@@ -38,6 +38,3 @@ Known bugs:
 cause to be determined.
 These samples are currently set to zero.
 Zero-valued samples are ignored in mean and RMS calculations.
-
-The range of runs being processed must be contiguous, and there can be no runs before
-the first run to be processed in the log file.

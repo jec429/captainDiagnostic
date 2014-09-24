@@ -8,11 +8,12 @@
 #  07/02/2014
 #
 
-OBJS = main.o TTPCDataHandler.o MDatRunReader.o MCRunReader.o VMRunReader.o
+OBJS = main.o TTPCDataHandler.o  VMRunReader.o \
+       MSingleEventRunReader.o
 
 #CC = /opt/local/bin/g++
 CC = g++
-CFLAGS = -fPIC -std=c++0x -std=c++11 -Wall #-g
+CFLAGS = -fPIC -std=c++0x -std=c++11 -Wall -O3 #-g
 INCLUDES = -I/usr/local/include/root
 LIBS = -L/usr/local/lib/root -lCore -lRIO -lHist -lGpad
 
@@ -24,18 +25,16 @@ plotPlanes : $(OBJS)
 main.o : main.cpp TTPCDataHandler.h Configuration.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c main.cpp
 
-TTPCDataHandler.o : TTPCDataHandler.cpp TTPCDataHandler.h MDatRunReader.h \
-                    MCRunReader.h Configuration.h
+TTPCDataHandler.o : TTPCDataHandler.cpp TTPCDataHandler.h Configuration.h \
+                    MSingleEventRunReader.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c TTPCDataHandler.cpp
 
 VMRunReader.o : VMRunReader.cpp VMRunReader.h Configuration.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c VMRunReader.cpp
 
-MDatRunReader.o : MDatRunReader.cpp MDatRunReader.h VMRunReader.h Configuration.h
-	$(CC) $(CFLAGS) $(INCLUDES) -c MDatRunReader.cpp
-
-MCRunReader.o : MCRunReader.cpp MCRunReader.h VMRunReader.h Configuration.h
-	$(CC) $(CFLAGS) $(INCLUDES) -c MCRunReader.cpp
+MSingleEventRunReader.o : MSingleEventRunReader.cpp MSingleEventRunReader.h \
+                          VMRunReader.h Configuration.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c MSingleEventRunReader.cpp
 
 clean :
 	rm -f $(OBJS)

@@ -15,9 +15,8 @@
 
 TTPCDataHandler::TTPCDataHandler(const std::string& kLogPath,
                                  const std::string& kRunsDirectory,
-                                 const unsigned kFirstRun,
-                                 const unsigned kLastRun)
-: fkFirstRun(kFirstRun), fkLastRun(kLastRun)
+                                 const unsigned kRun)
+: fkRun(kRun)
 {
    std::ifstream logFile(POSIXExpand(kLogPath));
    if (logFile.good()) {
@@ -30,7 +29,7 @@ TTPCDataHandler::TTPCDataHandler(const std::string& kLogPath,
 
    } else {
       std::cout << "plotPlanes TTPCDataHandler() error: could not open log \""
-      << kLogPath << "\"" << std::endl;
+                << kLogPath << "\"" << std::endl;
       exit(EXIT_FAILURE);
    }
    logFile.close();
@@ -57,7 +56,7 @@ TTPCDataHandler::RunsWiresMap TTPCDataHandler::MapRunsToPlanes(std::ifstream& lo
       // ignore groups of commented lines when they appear
       char temp;
 
-      while ((logFile.get(temp), temp) == '#') {
+      while ((logFile.get(temp), temp) == '#' && logFile.good()) {
          logFile.ignore(256, '\n');
       }
       logFile.unget();
@@ -82,7 +81,7 @@ TTPCDataHandler::RunsWiresMap TTPCDataHandler::MapRunsToPlanes(std::ifstream& lo
       // read in the run number and port numbers in this log entry
       logFile >> run;
 
-      if (run >= fkFirstRun && run <= fkLastRun && logFile.good()) {
+      if (run >= fkRun && logFile.good()) {
          // the line driver port numbers corresponding to this run
          std::array<unsigned short, kgNPortsPerRun> runPorts;
 
@@ -117,10 +116,10 @@ TTPCDataHandler::RunsWiresMap TTPCDataHandler::MapRunsToPlanes(std::ifstream& lo
          unsigned wire;
          if (port % 2 == 0) {
             wire = port * kgNChannelsPerPort - kPlane * kgNWiresPerPlane
-            + 2 * iWire;
+                   + 2 * iWire;
          } else {
             wire = (port - 1) * kgNChannelsPerPort - kPlane * kgNWiresPerPlane
-            + 2 * iWire + 1;
+                   + 2 * iWire + 1;
          }
 
          wires[iWire] = wire;
@@ -156,15 +155,13 @@ TTPCDataHandler::RunsData TTPCDataHandler::AssembleRunsData(const std::string& k
 {
    RunsData runsData;
 
-   for (auto& run : kRunsToPlanes) {
-#if C_MACRO_MODE != 1
-      runsData.emplace(run.first, ReadRunData(POSIXExpand(kRunsDirectory) + "/xmit_exttrig_bin_"
-                                              + std::to_string(run.first) + ".dat"));
-#else
-      runsData.emplace(run.first, ReadRunData(POSIXExpand(kRunsDirectory)
-                                              + "/outputdir_run_" + std::to_string(run.first)));
-#endif
-   }
+   runsData.emplace(fkRun, MSingleEventRunReader::ReadRunData(POSIXExpand(kRunsDirectory)
+                                                                   + "/xmit_exttrig_bin_"
+                                                                   + std::to_string(fkRun)
+                                                                   + ".dat", kRunsToPlanes.at(fkRun)));
+
+
+
    return runsData;
 }
 
@@ -172,46 +169,51 @@ TTPCDataHandler::RunsData TTPCDataHandler::AssembleRunsData(const std::string& k
 TTPCDataHandler::PlanesData TTPCDataHandler::AssemblePlanesData(const RunsData& kRunsData,
                                                                 const RunsWiresMap& kRunsWiresMap) const
 {
-   // kRunsData: run <--> [collection][channel][sample]
+
+   // kRunsData: run <--> [event][plane][channel][sample]
    // kRunsWiresMap: run <--> [(plane, [wire])]
 
 
-
-   // planesData: [plane][collection][wire][sample]
+   // planesData: [plane][event][wire][sample]
    PlanesData planesData;
    for (auto& run : kRunsWiresMap) {
 
-      for (unsigned short iCollection = 0; iCollection < kRunsData.at(run.first).size(); ++iCollection) {
-
-         for (unsigned short iRunPort = 0; iRunPort < kRunsWiresMap.at(run.first).size(); ++iRunPort) {
-
-            const unsigned short kiPlane = kRunsWiresMap.at(run.first)[iRunPort].fPlane;
+       for (unsigned short iEvent = 0; iEvent < kRunsData.at(run.first).size(); ++iEvent) {
+          unsigned short runPlane = 0, iPlane = 0;
 
 
-            while (planesData.size() <= kiPlane) {
-               planesData.push_back(PlaneData{});
+         for (unsigned short iRunPort = 0; iRunPort < kgNPortsPerRun; ++iRunPort) {
 
+            if (iPlane != kRunsWiresMap.at(run.first)[iRunPort].fPlane) {
+               iPlane = kRunsWiresMap.at(run.first)[iRunPort].fPlane;
+               ++runPlane;
             }
-            while (planesData[kiPlane].size() <= iCollection) {
-               std::unique_ptr<PlaneCollection> collection(new PlaneCollection{});
-               planesData[kiPlane].push_back(std::move(collection));
+
+
+            while (planesData.size() <= iPlane) {
+               planesData.push_back(PlaneData{});
+            }
+            while (planesData[iPlane].size() <= iEvent) {
+               std::unique_ptr<PlaneEvent> event(new PlaneEvent{});
+               planesData[iPlane].push_back(std::move(event));
             }
 
 
             for (unsigned short portChannel = 0; portChannel < kgNChannelsPerPort; ++portChannel) {
 
-               const unsigned short kRunChannel = iRunPort * kgNChannelsPerPort + portChannel,
-               kWire = kRunsWiresMap.at(run.first)[iRunPort].fWires[portChannel];
+               const unsigned short kRunPlaneChannel = iRunPort * kgNChannelsPerPort - runPlane * kgNWiresPerPlane + portChannel,
+                                    kWire = kRunsWiresMap.at(run.first)[iRunPort].fWires[portChannel];
+              // std::cout << "plane" << iPlane << "event" << iEvent << "wire" << kWire << "run" << run.first << "runplanechannel" << kRunPlaneChannel << "portchannel" << portChannel << "iRunPort" << iRunPort<<"\n";
 
-               for (unsigned short iSample = 0; iSample < kRunsData.at(run.first)[iCollection][kRunChannel].size(); ++iSample) {
-                  (*planesData[kiPlane][iCollection])[kWire][iSample] = kRunsData.at(run.first)[iCollection][kRunChannel][iSample];
-
+               for (unsigned short iSample = 0; iSample < kgNSamplesPerChannel; ++iSample) {
+                  (*planesData[iPlane][iEvent])[kWire][iSample] = (*kRunsData.at(run.first)[iEvent])[iPlane][kRunPlaneChannel][iSample];
                }
 
             }
          }
       }
    }
+
 
    return planesData;
 }
@@ -224,12 +226,12 @@ float TTPCDataHandler::ComputeWireMeanVoltage(const unsigned short kiPlane,
    float mean = 0;
    unsigned nSamples = 0;
 
-   for (unsigned short collection = 0; collection < fPlanesData[kiPlane].size(); ++collection) {
-      for (unsigned short iSample = 0; iSample < (*fPlanesData[kiPlane][collection])[kiWire].size(); ++iSample) {
+   for (unsigned short event = 0; event < fPlanesData[kiPlane].size(); ++event) {
+      for (unsigned short iSample = 0; iSample < (*fPlanesData[kiPlane][event])[kiWire].size(); ++iSample) {
 
          // ignoring zero-valued samples
-         if ((*fPlanesData[kiPlane][collection])[kiWire][iSample] != 0) {
-            mean += (*fPlanesData[kiPlane][collection])[kiWire][iSample];
+         if ((*fPlanesData[kiPlane][event])[kiWire][iSample] != 0) {
+            mean += (*fPlanesData[kiPlane][event])[kiWire][iSample];
             ++nSamples;
          }
 
@@ -244,13 +246,13 @@ float TTPCDataHandler::ComputeWireMeanVoltage(const unsigned short kiPlane,
 
 
 
-float TTPCDataHandler::ComputePlaneCollectionMeanVoltage(const unsigned short kiPlane,
-                                                         const unsigned short kiCollection) const
+float TTPCDataHandler::ComputePlaneEventMeanVoltage(const unsigned short kiPlane,
+                                                         const unsigned short kiEvent) const
 {
    float mean = 0;
    unsigned nSamples = 0;
 
-   for (auto& wire : *fPlanesData[kiPlane][kiCollection]) {
+   for (auto& wire : *fPlanesData[kiPlane][kiEvent]) {
       for (int sample : wire) {
 
          // ignoring zero-valued samples
@@ -272,14 +274,14 @@ float TTPCDataHandler::ComputePlaneCollectionMeanVoltage(const unsigned short ki
 
 TTPCDataHandler::WiresRMS TTPCDataHandler::ComputeWiresRMS() const
 {
-   WiresRMS RMS{{0}};
+   WiresRMS RMS{};
 
    for (unsigned short iPlane = 0; iPlane < fPlanesData.size(); ++iPlane) {
       for (unsigned short wire = 0; wire < kgNWiresPerPlane; ++wire) {
          float mean0 = 0;
          unsigned nSamples = 0;
-         for (auto& collection : fPlanesData[iPlane]) {
-            for (int sample : (*collection)[wire]) {
+         for (auto& event : fPlanesData[iPlane]) {
+            for (int sample : (*event)[wire]) {
                // ignoring zero-valued samples
                if (sample != 0) {
                   mean0 += sample;
@@ -292,8 +294,8 @@ TTPCDataHandler::WiresRMS TTPCDataHandler::ComputeWiresRMS() const
          }
 
          float RMS0 = 0.;
-         for (auto& collection : fPlanesData[iPlane]) {
-            for (int sample : (*collection)[wire]) {
+         for (auto& event : fPlanesData[iPlane]) {
+            for (int sample : (*event)[wire]) {
                // ignoring zero-valued samples
                if (sample != 0) {
                   RMS0 += std::pow(sample, 2);
@@ -306,8 +308,8 @@ TTPCDataHandler::WiresRMS TTPCDataHandler::ComputeWiresRMS() const
 
          float mean1 = 0;
          nSamples = 0;
-         for (auto& collection : fPlanesData[iPlane]) {
-            for (int sample : (*collection)[wire]) {
+         for (auto& event : fPlanesData[iPlane]) {
+            for (int sample : (*event)[wire]) {
                // ignoring zero-valued samples
                if (std::abs(sample - mean0) < 3 * RMS0 && sample != 0) {
                   mean1 += sample;
@@ -321,8 +323,8 @@ TTPCDataHandler::WiresRMS TTPCDataHandler::ComputeWiresRMS() const
 
          float RMS1 = 0;
          nSamples = 0;
-         for (auto& collection : fPlanesData[iPlane]) {
-            for (int sample : (*collection)[wire]) {
+         for (auto& event : fPlanesData[iPlane]) {
+            for (int sample : (*event)[wire]) {
                // ignoring zero-valued samples
                if (std::abs(sample - mean1) < 3 * RMS0 && sample != 0) {
                   RMS1 += std::pow(sample - mean1, 2.);
@@ -392,7 +394,7 @@ TTPCDataHandler::ASICsMeanRMS TTPCDataHandler::GetASICsMeanRMS() const
 
 
 
-float TTPCDataHandler::ComputeFractionNoisy(const WiresRMS kRMS,
+float TTPCDataHandler::ComputeFractionNoisy(const WiresRMS& kRMS,
                                             const unsigned short kiPlane) const {
 
    // compute mean RMS
@@ -414,7 +416,7 @@ float TTPCDataHandler::ComputeFractionNoisy(const WiresRMS kRMS,
    // count noisy channels
    unsigned short nNoisy = 0;
    for (float RMS : kRMS[kiPlane]) {
-      if (RMS - meanRMS > kgNSigmaNoisyThreshold * sigmaRMS) {
+      if (RMS - meanRMS > kgNoisyThreshold) {
          ++nNoisy;
       }
    }
@@ -425,7 +427,7 @@ float TTPCDataHandler::ComputeFractionNoisy(const WiresRMS kRMS,
 
 
 
-float TTPCDataHandler::ComputeFractionNoisy(const ASICsMeanRMS kRMS,
+float TTPCDataHandler::ComputeFractionNoisy(const ASICsMeanRMS& kRMS,
                                             const unsigned short kiPlane) const {
 
    // compute mean RMS
@@ -451,7 +453,7 @@ float TTPCDataHandler::ComputeFractionNoisy(const ASICsMeanRMS kRMS,
    unsigned short nNoisy = 0;
    for (auto motherboard : kRMS[kiPlane]) {
       for (auto ASIC : motherboard) {
-         if (ASIC.fRMS - meanRMS > kgNSigmaNoisyThreshold * sigmaRMS) {
+         if (ASIC.fRMS - meanRMS > kgNoisyThreshold) {
             ++nNoisy;
          }
       }
@@ -464,8 +466,8 @@ float TTPCDataHandler::ComputeFractionNoisy(const ASICsMeanRMS kRMS,
 
 std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) const
 {
-   std::string runs("runs" + std::to_string(fkFirstRun) + "through" + std::to_string(fkLastRun)),
-   allDataFilename(runs + ".root");
+   std::string runs = kROOTFilename,
+               allDataFilename = runs + ".root";
    // if the file already exists, try appending successive numbers __2, __3, ...
    unsigned short iDuplicate = 0;
    if (std::ifstream(allDataFilename).good()) {
@@ -485,13 +487,13 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
 
       { // construct voltage histograms
-         for (unsigned short iCollection = 0; iCollection < fPlanesData[iPlane].size(); ++iCollection) {
+         for (unsigned short iEvent = 0; iEvent < fPlanesData[iPlane].size(); ++iEvent) {
 
             // histograms have voltage pedestal subtracted
-            const int kVoltagePedestal = std::round(ComputePlaneCollectionMeanVoltage(iPlane, iCollection));
-            TH2S voltageHistogram(std::string("volts_" + kgPlaneNames[iPlane] + "PlaneCol" + std::to_string(iCollection)).c_str(),
-                                  std::string(kgPlaneNames[iPlane] + " plane, collection "
-                                              + std::to_string(iCollection) + ", subtracted pedestal "
+            const int kVoltagePedestal = std::round(ComputePlaneEventMeanVoltage(iPlane, iEvent));
+            TH2S voltageHistogram(std::string("volts_" + kgPlaneNames[iPlane] + "PlaneCol" + std::to_string(iEvent)).c_str(),
+                                  std::string(kgPlaneNames[iPlane] + " plane, event "
+                                              + std::to_string(iEvent) + ", subtracted pedestal "
                                               + std::to_string(kVoltagePedestal) + " ADC units").c_str(),
                                   kgNSamplesPerChannel, 0, kgChannelTimeWindow,
                                   kgNWiresPerPlane, 0, kgNWiresPerPlane);
@@ -505,9 +507,9 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
                for (unsigned short iSample = 0; iSample < kgNSamplesPerChannel; ++iSample) {
 
                   // ignoring zero-valued samples
-                  if ((*fPlanesData[iPlane][iCollection])[wire][iSample] != 0) {
+                  if ((*fPlanesData[iPlane][iEvent])[wire][iSample] != 0) {
                      voltageHistogram.SetBinContent(iSample + 1, wire + 1,
-                                                    (*fPlanesData[iPlane][iCollection])[wire][iSample]
+                                                    (*fPlanesData[iPlane][iEvent])[wire][iSample]
                                                     - kVoltagePedestal);
 
 
@@ -529,9 +531,9 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
       { // construct wire RMS histogram
 
          TH1F RMSHistogram(std::string("RMS_" + kgPlaneNames[iPlane] + "Plane").c_str(),
-                           std::string(kgPlaneNames[iPlane] + " plane,"
+                           std::string(kgPlaneNames[iPlane] + " plane, "
                                        + std::to_string(ComputeFractionNoisy(fRMS, iPlane) * 100)
-                                       + "% are >1#sigma").c_str(),
+                                       + "% are >" + std::to_string(kgNoisyThreshold)).c_str(),
                            kgNWiresPerPlane, 0, kgNWiresPerPlane);
 
          for (unsigned short wire = 0; wire < fRMS[iPlane].size(); ++wire) {
@@ -540,6 +542,7 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
 
          RMSHistogram.SetXTitle("wire");
          RMSHistogram.SetYTitle("noise RMS voltage (ADC units)");
+         RMSHistogram.GetXaxis()->SetNdivisions(406, kFALSE);
          RMSHistogram.Write();
 
          TCanvas cRMS;
@@ -556,7 +559,7 @@ std::string TTPCDataHandler::WritePlanesData(const std::string& kROOTFilename) c
          TH1F ASICMeanRMSHistogram(std::string("ASICMeanRMS_" + kgPlaneNames[iPlane] + "Plane").c_str(),
                                    std::string(kgPlaneNames[iPlane] + " plane,"
                                                + std::to_string(ComputeFractionNoisy(RMS, iPlane) * 100)
-                                               + "% are >1#sigma").c_str(),
+                                               + "% are >" + std::to_string(kgNoisyThreshold)).c_str(),
                                    kgNASICSPerPlane, 0, kgNASICSPerPlane);
 
 

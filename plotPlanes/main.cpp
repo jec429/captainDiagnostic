@@ -13,44 +13,40 @@
 
 int main(int argc, const char* argv[])
 {
-   unsigned short firstRun, lastRun;
+   unsigned short run;
    std::string logFilePath, datDirectoryPath;
 
-   unsigned short iArg = 0;
-   if (argc == 5) {
 
-      datDirectoryPath = argv[++iArg];
-      firstRun = std::atoi(argv[++iArg]);
-      lastRun = std::atoi(argv[++iArg]);
-      logFilePath = argv[++iArg];
+   // process command line arguements
+   unsigned short iArg = argc;
 
 
+   if (argc == 4) {
+      run = std::atoi(argv[--iArg]);
+      logFilePath = argv[--iArg];
+      datDirectoryPath = argv[--iArg];
    } else {
-
-
-      if (argc == 2) {
-         datDirectoryPath = argv[++iArg];
-      } else {
-         std::cout << "Enter dat directory path: ";
-         std::cin >> datDirectoryPath;
-      }
-
-      std::cout << "Enter lowest run number to process: ";
-      std::cin >> firstRun;
-      std::cout << "Enter highest run number to process: ";
-      std::cin >> lastRun;
+      // if command line arguments are missing or invalid, prompt for run parameters
+      std::cout << "Enter dat directory path: ";
+      std::cin >> datDirectoryPath;
 
       std::cout << "Enter log file: ";
       std::cin >> logFilePath;
+
+      std::cout << "Enter run number to process: ";
+      std::cin >> run;
+
    }
 
 
-   
    std::cout << "..." << std::endl;
-   std::string ROOTFilename("runs" + std::to_string(firstRun)
-                            + "through" + std::to_string(lastRun) + ".root");
-   TTPCDataHandler handler(logFilePath, datDirectoryPath, firstRun, lastRun);
-   ROOTFilename = handler.WritePlanesData(ROOTFilename);
+
+
+   std::string ROOTFilename;
+   ROOTFilename = "run" + std::to_string(run);
+
+   TTPCDataHandler handler(logFilePath, datDirectoryPath, run);
+   handler.WritePlanesData(ROOTFilename);
 
 
 

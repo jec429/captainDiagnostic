@@ -12,8 +12,7 @@
 #ifndef __plotPlanes__TTPCDataHandler__
 #define __plotPlanes__TTPCDataHandler__
 
-#include "MDatRunReader.h"
-#include "MCRunReader.h"
+#include "MSingleEventRunReader.h"
 #include <TH1.h>
 #include <TH2.h>
 #include <TLine.h>
@@ -28,38 +27,29 @@
 
 
 /// class to assemble TPC run data, calculate noise RMS, and map onto the wire planes
-class TTPCDataHandler
-#if C_MACRO_MODE != 1
-:  protected MDatRunReader
-#else
-:  protected MCRunReader
-#endif
-{
+class TTPCDataHandler: protected MSingleEventRunReader {
+
 
    /// the first and last run numbers from the log to be included in the mapping
-   const unsigned fkFirstRun, fkLastRun;
+   const unsigned fkRun;
 
-   /// RunsData: run <--> [collection][channel][sample]
+   /// RunsData: run <--> (*[event])[plane][channel][sample]
    typedef std::map<unsigned, RunData> RunsData;
 
-   /// RunsWiresMap: run <--> [port](plane, [wire])
-   struct PlaneWires {
-      unsigned short fPlane;
-      std::array<unsigned short, kgNChannelsPerPort> fWires;
-   };
+   /// RunsWiresMap: run <--> [port]{plane, [wire]}
    typedef std::map<unsigned, std::array<PlaneWires, kgNPortsPerRun>> RunsWiresMap;
 
-   /// PlanesData: (*[plane][collection])[wire][sample]
-   /// for now, PlaneData groups channels by collection number,
+   /// PlanesData: (*[plane][event])[wire][sample]
+   /// for now, PlaneData groups channels by event number,
    /// an arbitrary association when planes are split across multiple runs.
-   typedef std::array<std::array<int, kgNSamplesPerChannel>, kgNWiresPerPlane> PlaneCollection;
-   typedef std::vector<std::unique_ptr<PlaneCollection>> PlaneData;
+   typedef std::array<std::array<int, kgNSamplesPerChannel>, kgNWiresPerPlane> PlaneEvent;
+   typedef std::vector<std::unique_ptr<PlaneEvent>> PlaneData;
    typedef std::vector<PlaneData> PlanesData;
 
    /// WiresRMS: [plane][wire]
    typedef std::array<std::array<float, kgNWiresPerPlane>, kgNPlanes> WiresRMS;
 
-   /// ASICsMeanRMS: [plane][motherboard][ASIC](fRMS, fWires)
+   /// ASICsMeanRMS: [plane][motherboard][ASIC]{fRMS, fWires}
    struct RMSWires {
       float fRMS;
       std::array<unsigned short, kgNChannelsPerASIC> fWires;
@@ -68,15 +58,9 @@ class TTPCDataHandler
                                  kgNMotherboardsPerPlane>, kgNPlanes> ASICsMeanRMS;
 
 
-   /// CrossCorrelations: [plane][collection][wire][phase]
-   typedef std::array<std::array<std::array<std::array<std::array<float, kgNSamplesPerChannel>,
-                                             kgNWiresPerPlane>, kgNWiresPerPlane>, kgNCollectionsPerRun>, kgNPlanes>
-           CrossCorrelations;
-
 
    // data members
    PlanesData fPlanesData;
-   // CrossCorrelations fCorrelations;
    WiresRMS fRMS;
 
 
@@ -88,23 +72,20 @@ class TTPCDataHandler
    /// given the path of the directory containing Nevis dat files and/or C macro
    // /run directories and a RunsWiresMap from run numbers onto the wire planes
    /// and wires, assemble a RunsData mapping from run numbers onto the data,
-   /// indexed by collection, channel, and sample.
+   /// indexed by Event, channel, and sample.
    RunsData AssembleRunsData(const std::string& kRunPath,
                              const RunsWiresMap& kRunsToPlanes) const;
 
    /// given a RunsData mapping and RunsWiresMap mapping, assemble data into a
-   /// PlanesData vector indexed by plane, collection, wire, and sample.
+   /// PlanesData vector indexed by plane, event, wire, and sample.
    PlanesData AssemblePlanesData(const RunsData& kRunsData, const RunsWiresMap& kRunsWiresMap) const;
-
-   /// Compute cross-correlations between wires
-   CrossCorrelations ComputeCrossCorrelations() const;
 
    /// compute the mean RMS for each wire
    WiresRMS ComputeWiresRMS() const;
 
 public:
-   /// given the path to a log file kLogPath and the run numbers of the first and last run
-   /// to be included from this run, kFirstRun and kLastRun, construct a TTPCDataHandler.
+   /// given the path to a log file kLogPath and the run number
+   /// to be processed, kRun, construct a TTPCDataHandler.
    ///
    /// log files should be plaintext formatted as follows:
    ///
@@ -112,14 +93,14 @@ public:
    /// # comment
    ///
    TTPCDataHandler(const std::string& kLogPath, const std::string& kRunsDirectory,
-                   const unsigned kFirstRun, const unsigned kLastRun);
+                   const unsigned kRun);
 
    /// compute the mean sample value on the wire iWire
    float ComputeWireMeanVoltage(const unsigned short kiPlane, const unsigned short kiWire) const;
 
-   /// compute the mean sample value of the entire plane kiPlane for collection kiCollection
-   float ComputePlaneCollectionMeanVoltage(const unsigned short kiPlane,
-                                           const unsigned short kiCollection) const;
+   /// compute the mean sample value of the entire plane kiPlane for Event kiEvent
+   float ComputePlaneEventMeanVoltage(const unsigned short kiPlane,
+                                      const unsigned short kiEvent) const;
 
    /// Calculate the voltage noise RMS for all wires.
    /// This makes two passes: one pass calculates an initial voltage pedestal (mean0)
@@ -133,16 +114,12 @@ public:
    ASICsMeanRMS GetASICsMeanRMS() const;
 
    /// Compute the percentge of channels with RMS > 3 sigmaRMS
-   float ComputeFractionNoisy(const WiresRMS kRMS, const unsigned short kiPlane) const;
-   float ComputeFractionNoisy(const ASICsMeanRMS kRMS, const unsigned short kiPlane) const;
-
-   /// Get cross-correlations between wires
-   CrossCorrelations GetCrossCorrelations() const;
+   float ComputeFractionNoisy(const WiresRMS& kRMS, const unsigned short kiPlane) const;
+   float ComputeFractionNoisy(const ASICsMeanRMS& kRMS, const unsigned short kiPlane) const;
 
    /// get all wire plane voltage data
    PlanesData GetPlanesData() const;
-
-   /// write out all data for all wire planes to a ROOT file, grouped by collection number,
+   /// write out all data for all wire planes to a ROOT file, grouped by event number,
    /// an arbitrary association when planes are split across multiple runs.
    std::string WritePlanesData(const std::string& kROOTFilename) const;
 
